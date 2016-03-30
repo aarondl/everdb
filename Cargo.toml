@@ -1,0 +1,7 @@
+[package]
+name = "everdb"
+version = "0.1.0"
+authors = ["\"Aaron <\"aaron@bettercoder.net\">"]
+
+[dependencies]
+memmap = "*"
