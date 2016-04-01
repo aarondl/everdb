@@ -4,4 +4,6 @@ version = "0.1.0"
 authors = ["\"Aaron <\"aaron@bettercoder.net\">"]
 
 [dependencies]
-memmap = "*"
+rmp = "*"
+rmp-serialize = "*"
+rustc-serialize = "*"
