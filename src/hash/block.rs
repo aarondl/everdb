@@ -1,3 +1,5 @@
+pub const BLOCK_FOOTER_SIZE : u32 = 16; // sizeof(u32)
+
 pub type Block = [u8 ; 4096];
 
 macro_rules! new_block {

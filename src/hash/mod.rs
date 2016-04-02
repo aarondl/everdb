@@ -17,6 +17,9 @@ mod math;
 mod block;
 mod entry;
 
+const HASH_FOOTER_SIZE : u32 = 64 + 32 + 8; // sizeof(Hash)
+
+/*
 /// Hash is a linear hash table
 struct Hash {
     count: u64,
@@ -41,3 +44,4 @@ mod tests {
         assert!(h.level == 0);
     }
 }
+*/

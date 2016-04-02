@@ -1,3 +1,4 @@
+/*
 const BLOCK_BITS : u32 = 12; // 4096 bytes
 const BLOCK_SIZE : u32 = 1 << BLOCK_BITS;
 const BLOCK_MASK : u32 = BLOCK_SIZE - 1;
@@ -48,3 +49,4 @@ mod tests {
         assert!(next_block_helper(1025) == 2048);
     }
 }
+*/
