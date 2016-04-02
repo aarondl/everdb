@@ -230,7 +230,7 @@ mod tests {
     use super::super::block::*;
 
     #[test]
-    fn get_sub_bucket() {
+    fn get_put_sub_bucket() {
         let mut b : Block = new_block!();
 
         let mut h = HashMap::new();
@@ -241,10 +241,13 @@ mod tests {
 
         let h2 = super::get_sub_bucket(&b, 1).unwrap().unwrap();
         assert_eq!(h, h2);
+
+        let h3 = super::get_sub_bucket(&b, 2).unwrap();
+        assert!(h3.is_none());
     }
 
     #[test]
-    fn put_sub_bucket() {
+    fn del_sub_bucket() {
         let mut b : Block = new_block!();
 
         let mut h = HashMap::new();
@@ -252,7 +255,9 @@ mod tests {
         h.insert(7, 8);
 
         super::put_sub_bucket(&mut b, 0, &mut h).unwrap();
-        super::put_sub_bucket(&mut b, 2, &mut h).unwrap();
+        super::del_sub_bucket(&mut b, 0);
+        let h = super::get_sub_bucket(&mut b, 0).unwrap();
+        assert!(h.is_none());
     }
 
     #[test]
