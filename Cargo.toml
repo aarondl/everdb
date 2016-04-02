@@ -7,3 +7,4 @@ authors = ["\"Aaron <\"aaron@bettercoder.net\">"]
 rmp = "*"
 rmp-serialize = "*"
 rustc-serialize = "*"
+byteorder = "*"

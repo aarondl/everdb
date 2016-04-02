@@ -33,7 +33,7 @@ macro_rules! index1 {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     fn next_block_helper(x : u32) -> u32 {
         let next_block0 = (x + super::INDEX_SIZE) & (!super::INDEX_MASK);
         return next_block0;
