@@ -1,14 +1,12 @@
-use std::cmp::Ordering;
+mod msgpack_helpers;
+mod block_iterator;
+mod helpers;
+
 use std::collections::HashMap;
-use std::io::Write;
-use std::io::Read;
-use std::io::Cursor;
 
 use byteorder::{BigEndian, ByteOrder};
-use msgpack_coders::{Encoder,Decoder};
-use rustc_serialize::Decodable;
-use rustc_serialize::Encodable;
 
+use self::helpers::*;
 use super::block::Block;
 
 const ENTRY_SIZE             : u32 = 4;
@@ -31,7 +29,7 @@ pub fn put_sub_bucket(block : &mut Block, index : u32, map : &HashMap<i32,i32>) 
     }
 
     let buf : Vec<u8>;
-    match encode_msgpack(map) {
+    match msgpack_helpers::encode(map) {
         Ok(v)  => buf = v,
         Err(e) => return Err(e),
     }
@@ -77,7 +75,7 @@ pub fn get_sub_bucket(block : &Block, index : u32) -> Result<Option<HashMap<i32,
     let offset = entry.offset as usize;
     let size = entry.size as usize;
 
-    match decode_msgpack(&block[offset..offset+size]) {
+    match msgpack_helpers::decode(&block[offset..offset+size]) {
         Ok(v)  => Ok(Some(v)),
         Err(e) => return Err(e),
     }
@@ -117,7 +115,7 @@ fn find_space(block : &Block, want_size : u16) -> Option<u16> {
     let size = next_power_of_2(want_size);
 
     // Sort all the entries such that they're ordered by offset
-    let mut entries : Vec<Entry> = BlockIterator::new(&block).collect();
+    let mut entries : Vec<Entry> = block_iterator::BlockIterator::new(&block).collect();
     entries.sort();
 
     for e in entries {
@@ -138,90 +136,6 @@ fn find_space(block : &Block, want_size : u16) -> Option<u16> {
 
     Some(next_offset)
 }
-
-/// Return a buffer with the serialized hash map in it.
-fn encode_msgpack(map : &HashMap<i32,i32>) -> Result<Vec<u8>, String> {
-    let mut buf: Vec<u8> = Vec::new();
-
-    {
-        let mut encoder = Encoder::new(&mut buf);
-        if let Some(e) = map.encode(&mut encoder).err() {
-            return Err(format!("error writing map: {}", e))
-        }
-    }
-
-    Ok(buf)
-}
-
-/// Decode a serialized hash map from a slice
-fn decode_msgpack(slice : &[u8]) -> Result<HashMap<i32,i32>, String> {
-    let c = Cursor::new(slice);
-
-    let mut decoder = Decoder::new(c);
-    match Decodable::decode(&mut decoder) {
-        Ok(h)  => return Ok(h),
-        Err(e) => Err(format!("error reading map: {}", e)),
-    }
-}
-
-/// Bit twiddling magic function.
-///
-/// Essentially continuously or's it with itself
-/// moving bits down the row and once all the bits
-/// are filled in it adds one to turn on the next
-/// power of two bit.
-fn next_power_of_2(from : u16) -> u16 {
-    let mut n = from - 1;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    //n |= n >> 16; // Not needed since I've shrank the size of the integer
-    n + 1
-}
-
-struct BlockIterator<'a> {
-    i: u32,
-    block: &'a [ u8; 4096 ],
-}
-
-impl<'a> BlockIterator<'a> {
-    fn new(b : &Block) -> BlockIterator {
-        BlockIterator {
-            i: 0,
-            block: b,
-        }
-    }
-}
-
-impl<'a> Iterator for BlockIterator<'a> {
-    type Item = Entry;
-
-    fn next(&mut self) -> Option<Entry> {
-        if self.i == 256 {
-            return None
-        }
-
-        let entry = get_entry(self.block, self.i);
-        self.i += 1;
-
-        return Some(entry);
-    }
-}
-
-
-// This chunk of code is pretty ridiculous. Haskell beats you here pretty hard Rust.
-impl PartialOrd for Entry {
-    fn partial_cmp(&self, other : &Entry) -> Option<Ordering> { self.offset.partial_cmp(&other.offset) }
-}
-impl PartialEq for Entry {
-    fn eq(&self, other : &Entry) -> bool { self.offset.eq(&other.offset) }
-}
-impl Ord for Entry {
-    fn cmp(&self, other : &Entry) -> Ordering { self.offset.cmp(&other.offset) }
-}
-impl Eq for Entry {}
-
 
 #[cfg(test)]
 mod tests {
@@ -320,48 +234,5 @@ mod tests {
 
         assert_eq!(super::find_space(&b, 9).unwrap(), 48);
         assert_eq!(super::find_space(&b, 28).unwrap(), 96);
-    }
-
-    #[test]
-    fn next_power_of_2() {
-        assert_eq!(super::next_power_of_2(1), 1);
-        assert_eq!(super::next_power_of_2(3), 4);
-        assert_eq!(super::next_power_of_2(5), 8);
-        assert_eq!(super::next_power_of_2(6), 8);
-        assert_eq!(super::next_power_of_2(11), 16);
-        assert_eq!(super::next_power_of_2(17), 32);
-    }
-
-    #[test]
-    fn iterators() {
-        let b : Block = new_block!();
-        let mut bi = super::BlockIterator::new(&b);
-
-        let mut count = 0;
-        for e in bi {
-            count += 1;
-        }
-
-        bi = super::BlockIterator::new(&b);
-        bi.collect::<Vec<super::Entry>>().sort();
-
-        assert_eq!(count, super::MAX_SUB_BUCKETS);
-    }
-
-    #[test]
-    fn sorting() {
-        let mut b : Block = new_block!();
-
-        super::put_entry(&mut b, 0, super::Entry { offset: 196, size: 16 });
-        super::put_entry(&mut b, 1, super::Entry { offset: 16, size: 32 });
-        super::put_entry(&mut b, 2, super::Entry { offset: 36, size: 32 });
-
-        let mut entries : Vec<super::Entry> = super::BlockIterator::new(&b).collect();
-        entries.sort();
-
-        let offsets : Vec<u16> = entries.iter().map(|i| i.offset).collect();
-
-        // There's going to be a lot of zeroes in here, cull them out
-        assert_eq!(offsets[offsets.len()-3..], [16, 36, 196]);
     }
 }
