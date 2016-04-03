@@ -13,7 +13,6 @@
 //! The third section is the hash table information (footer)
 
 #[macro_use]
-mod block;
 mod entry;
 
 const HASH_FOOTER_SIZE : u32 = 64 + 32 + 8; // sizeof(Hash)

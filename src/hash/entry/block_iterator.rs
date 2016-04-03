@@ -48,12 +48,11 @@ impl Eq for Entry {}
 mod test {
     use super::BlockIterator;
     use super::super::MAX_SUB_BUCKETS;
-    use super::super::super::block::{EMPTY_BLOCK};
     use super::super::{Entry,SubBucketer};
 
     #[test]
     fn iterators() {
-        let b = SubBucketer(EMPTY_BLOCK);
+        let b = SubBucketer::new();
         let mut bi = BlockIterator::new(&b);
 
         let mut count = 0;
@@ -69,7 +68,7 @@ mod test {
 
     #[test]
     fn sorting() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
 
         b.put_entry(0, Entry { offset: 196, size: 16 });
         b.put_entry(1, Entry { offset: 16, size: 32 });

@@ -1,18 +1,22 @@
-mod msgpack_helpers;
+mod block;
 mod block_iterator;
 mod helpers;
+mod msgpack_helpers;
 
+// Stdlib
 use std::collections::HashMap;
 
+// Extern crate
 use byteorder::{BigEndian, ByteOrder};
 
+// Ours
 use self::helpers::*;
-use super::block::Block;
+use self::block::{Block,EMPTY_BLOCK};
 
 const ENTRY_SIZE             : u32 = 4;
 const SUB_BUCKET_HEADER_SIZE : u32 = 1024;
 const MAX_SUB_BUCKETS        : u32 = SUB_BUCKET_HEADER_SIZE / ENTRY_SIZE;
-const MAX_DATA_SIZE          : u32 = 4096 - SUB_BUCKET_HEADER_SIZE - super::HASH_FOOTER_SIZE - super::block::BLOCK_FOOTER_SIZE;
+const MAX_DATA_SIZE          : u32 = 4096 - SUB_BUCKET_HEADER_SIZE - super::HASH_FOOTER_SIZE - self::block::BLOCK_FOOTER_SIZE;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Entry {
@@ -45,6 +49,11 @@ impl ::std::ops::DerefMut for SubBucketer {
 }
 
 impl SubBucketer {
+    /// Create an empty block and wrap it with SubBucketer
+    pub fn new() -> SubBucketer {
+        SubBucketer(EMPTY_BLOCK)
+    }
+
     /// Put a sub bucket into the block. Use msgpack to serialize the hashmap.
     pub fn put_sub_bucket(&mut self, index : u8, map : &HashMap<i32,i32>) -> Result<(), String> {
         let buf : Vec<u8> = try!(msgpack_helpers::encode(map));
@@ -143,12 +152,11 @@ impl SubBucketer {
 mod tests {
     use std::collections::HashMap;
 
-    use super::super::block::*;
     use super::SubBucketer;
 
     #[test]
     fn get_put_sub_bucket() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
 
         let mut h = HashMap::new();
         h.insert(5, 6);
@@ -165,7 +173,7 @@ mod tests {
 
     #[test]
     fn del_sub_bucket() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
 
         let mut h = HashMap::new();
         h.insert(5, 6);
@@ -179,7 +187,7 @@ mod tests {
 
     #[test]
     fn get_entry() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
 
         // write an entry at b[40] of size: 257, offset: 258
         b[40] = 1;
@@ -195,7 +203,7 @@ mod tests {
 
     #[test]
     fn put_entry() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
         let e = super::Entry { size: 257, offset: 258 };
 
         b.put_entry(10, e);
@@ -208,7 +216,7 @@ mod tests {
 
     #[test]
     fn find_space() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
 
         // If the entire space is taken error
         b.put_entry(0, super::Entry { offset: 0, size: super::MAX_DATA_SIZE as u16 });
@@ -217,7 +225,7 @@ mod tests {
 
     #[test]
     fn find_space_end() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
 
         // If there's space at the end
         b.put_entry(0, super::Entry { offset: 0, size: 9 });
@@ -228,7 +236,7 @@ mod tests {
 
     #[test]
     fn find_space_middle() {
-        let mut b = SubBucketer(EMPTY_BLOCK);
+        let mut b = SubBucketer::new();
 
         // If there's a chunk in between somewhere (out of order)
         b.put_entry(0, super::Entry { offset: 0, size: 9 });
