@@ -12,7 +12,6 @@
 //! The second section is the msgpack_maps themselves (because we're too lazy to do quadratic hashing)
 //! The third section is the hash table information (footer)
 
-mod math;
 #[macro_use]
 mod block;
 mod entry;
