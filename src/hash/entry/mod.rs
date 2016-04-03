@@ -20,6 +20,12 @@ pub struct Entry {
     size: u16,
 }
 
+impl Entry {
+    fn to_range(&self) -> ::std::ops::Range<usize> {
+        (self.offset as usize .. (self.offset+self.size) as usize)
+    }
+}
+
 /// SubBucketer is a Block enhancement that adds sub bucket operations.
 pub struct SubBucketer(Block);
 
@@ -55,9 +61,7 @@ impl SubBucketer {
 
         entry.size = size;
         self.put_entry(index, entry);
-        for (i, b) in buf.iter().enumerate() {
-            self[i+(entry.offset as usize)] = *b;
-        }
+        self[entry.to_range()].clone_from_slice(buf.as_slice());
 
         Ok(())
     }
