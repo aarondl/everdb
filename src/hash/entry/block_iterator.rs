@@ -2,10 +2,9 @@ use std::cmp::Ordering;
 
 use super::Entry;
 use super::SubBucketer;
-use super::super::block::Block;
 
 pub struct BlockIterator<'a> {
-    i: u32,
+    i: u16,
     block: &'a SubBucketer,
 }
 
@@ -26,7 +25,7 @@ impl<'a> Iterator for BlockIterator<'a> {
             return None
         }
 
-        let entry = self.block.get_entry(self.i);
+        let entry = self.block.get_entry(self.i as u8);
         self.i += 1;
 
         return Some(entry);

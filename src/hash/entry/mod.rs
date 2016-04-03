@@ -14,8 +14,6 @@ const SUB_BUCKET_HEADER_SIZE : u32 = 1024;
 const MAX_SUB_BUCKETS        : u32 = SUB_BUCKET_HEADER_SIZE / ENTRY_SIZE;
 const MAX_DATA_SIZE          : u32 = 4096 - SUB_BUCKET_HEADER_SIZE - super::HASH_FOOTER_SIZE - super::block::BLOCK_FOOTER_SIZE;
 
-static CANT_GROW_ERR : &'static str = "We can't grow in this implementation so indexes past 256 are untenable";
-
 #[derive(Copy, Clone, Debug)]
 pub struct Entry {
     offset: u16,
@@ -42,13 +40,8 @@ impl ::std::ops::DerefMut for SubBucketer {
 
 impl SubBucketer {
     /// Put a sub bucket into the block. Use msgpack to serialize the hashmap.
-    pub fn put_sub_bucket(&mut self, index : u32, map : &HashMap<i32,i32>) -> Result<(), String> {
-        if index >= MAX_SUB_BUCKETS {
-            panic!(CANT_GROW_ERR)
-        }
-
+    pub fn put_sub_bucket(&mut self, index : u8, map : &HashMap<i32,i32>) -> Result<(), String> {
         let buf : Vec<u8> = try!(msgpack_helpers::encode(map));
-
         let size       = buf.len() as u16;
         let mut entry  = self.get_entry(index);
 
@@ -71,22 +64,14 @@ impl SubBucketer {
 
     /// Delete a sub bucket from the block, essentially just zeroes out the
     /// entry so that it appears unused. The data is still present.
-    pub fn del_sub_bucket(&mut self, index : u32) {
-        if index >= MAX_SUB_BUCKETS {
-            panic!(CANT_GROW_ERR)
-        }
-
+    pub fn del_sub_bucket(&mut self, index : u8) {
         self.put_entry(index, Entry { offset: 0, size: 0 });
     }
 
     /// Get a sub bucket from the block, the result is gross and can return
     /// an Option hash map. In case the size of the block we're trying to get is 0
     /// which indicates a sub bucket that doesn't exist.
-    pub fn get_sub_bucket(&self, index : u32) -> Result<Option<HashMap<i32,i32>>, String> {
-        if index >= MAX_SUB_BUCKETS {
-            panic!(CANT_GROW_ERR)
-        }
-
+    pub fn get_sub_bucket(&self, index : u8) -> Result<Option<HashMap<i32,i32>>, String> {
         let entry = self.get_entry(index);
         if entry.size == 0 {
             return Ok(None)
@@ -102,12 +87,8 @@ impl SubBucketer {
     }
 
     /// Put an entry to some index, panics on bad index
-    fn put_entry(&mut self, index : u32, e : Entry) {
-        if index >= MAX_SUB_BUCKETS {
-            panic!(CANT_GROW_ERR)
-        }
-
-        let i = (index * 4) as usize;
+    fn put_entry(&mut self, index : u8, e : Entry) {
+        let i = (index as usize) * 4;
         let j = i + 2;
 
         BigEndian::write_u16(&mut self[i..i+2], e.offset);
@@ -115,12 +96,8 @@ impl SubBucketer {
     }
 
     /// Get an entry from an index, panics on bad index
-    fn get_entry(&self, index : u32) -> Entry {
-        if index >= MAX_SUB_BUCKETS {
-            panic!(CANT_GROW_ERR)
-        }
-
-        let i = (index * 4) as usize;
+    fn get_entry(&self, index : u8) -> Entry {
+        let i = (index as usize) * 4;
         let j = i + 2;
 
         Entry {
