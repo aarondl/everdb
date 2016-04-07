@@ -34,22 +34,24 @@ const SUB_BUCKET_BITS : u32 = 8;
 const SUB_BUCKET      : u32 = (1 << SUB_BUCKET_BITS); //(256)
 const SUB_BUCKET_MASK : u32 = (SUB_BUCKET - 1);       //(255 (1111 1111))
 
-type MaybeHash = Option<HashMap<i32,i32>>;
+type MaybeHash = Option<HashMap<String, String>>;
 
 impl Hash {
     fn new() -> Hash {
         Hash {
-            count: 1,
+            count: 0,
             split: 0,
-            level: 1,
+            level: 0,
             blocks: vec![SubBucketer::new()],
         }
     }
 
-    fn get_bucket(&self, key : String) -> (u8, MaybeHash) {
+    /// get_bucket is a helper function to retrieve the sub_bucket (the block).
+    fn get_bucket(&self, key : &str) -> (usize, u8, MaybeHash) {
         let hash : u32 = key.as_bytes().iter().fold(0, |a, b| a + (*b as u32)); // "hash" the string LOL
 
-        let level = 1 << self.level;
+        let level = if self.level == 0 { 0 } else { 1 << self.level };
+
         // h & (256)^(level+1) - 1  -- truncate the hash value to bits under some power of 2 based on level
         let mut bucket = hash & ((SUB_BUCKET << 1 << level) - 1);
 
@@ -64,12 +66,62 @@ impl Hash {
         let sub_bucket_index = (bucket & SUB_BUCKET_MASK) as u8;
         // Divide by 2^8 - this is effectively a % operation to ensure we select the right
         // block, but the modding is mostly done above. This succeeds because count = level + split
-        let block = &self.blocks[(bucket >> SUB_BUCKET_BITS) as usize];
+        let block_index = (bucket >> SUB_BUCKET_BITS) as usize;
+        let block = &self.blocks[block_index];
 
         match block.get_sub_bucket(sub_bucket_index) {
-            Ok(x)  => return (sub_bucket_index, x),
+            Ok(x)  => return (block_index, sub_bucket_index, x),
             Err(x) => panic!("how can there be no sub_bucket here?".to_string() + &x.to_string()),
         }
+    }
+
+    /// set a key-value pair
+    pub fn set(&mut self, key : &str, value : &str) {
+        let (block_index, sub_bucket_index, mut maybeHash) = self.get_bucket(key);
+
+        let mut hash : HashMap<String, String>;
+        match maybeHash {
+            Some(x) => hash = x,
+            None    => hash = HashMap::new(),
+        }
+
+        if !hash.contains_key(key) {
+            self.count += 1;
+        }
+
+        hash.insert(key.to_string(), value.to_string());
+
+        let mut shouldGrow = false;
+        {
+            let mut block = &mut self.blocks[block_index];
+            block.put_sub_bucket(sub_bucket_index, &hash).unwrap();
+            shouldGrow = block.len() > 3072;
+        }
+
+        if shouldGrow {
+            self.grow();
+        }
+    }
+
+    /// get a key-value pair
+    pub fn get(&self, key : &str) -> Option<String> {
+        let (_, _, mut maybeHash) = self.get_bucket(key);
+
+        let mut hash : HashMap<String, String>;
+        match maybeHash {
+            Some(x) => hash = x,
+            None    => return None,
+        }
+
+        match hash.get(key) {
+            Some(x) => Some(x.clone()),
+            None    => return None,
+        }
+    }
+
+    /// grow the hash table
+    fn grow(&mut self) {
+
     }
 }
 
@@ -79,14 +131,37 @@ mod tests {
     fn new() {
         let h = super::Hash::new();
 
-        assert_eq!(h.count, 1);
+        assert_eq!(h.count, 0);
         assert_eq!(h.split, 0);
-        assert_eq!(h.level, 1);
+        assert_eq!(h.level, 0);
         assert_eq!(h.blocks.len(), 1);
     }
 
     #[test]
     fn get_bucket() {
         let h = super::Hash::new();
+
+        let (block_index, sub_bucket_index, sub_bucket) = h.get_bucket("bucket");
+
+        assert_eq!(block_index, 0);
+        assert!(sub_bucket_index > 0);
+        assert!(sub_bucket.is_none());
+    }
+
+    #[test]
+    fn set() {
+        let mut h = super::Hash::new();
+
+        assert_eq!(h.count, 0);
+        h.set("rofl", "there");
+        assert_eq!(h.count, 1);
+    }
+
+    #[test]
+    fn get() {
+        let mut h = super::Hash::new();
+
+        h.set("rofl", "there");
+        assert_eq!(h.get("rofl").unwrap(), "there");
     }
 }

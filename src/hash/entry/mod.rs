@@ -18,6 +18,8 @@ const SUB_BUCKET_HEADER_SIZE : u32 = 1024;
 const MAX_SUB_BUCKETS        : u32 = SUB_BUCKET_HEADER_SIZE / ENTRY_SIZE;
 const MAX_DATA_SIZE          : u32 = 4096 - SUB_BUCKET_HEADER_SIZE - super::HASH_FOOTER_SIZE - self::block::BLOCK_FOOTER_SIZE;
 
+pub type StrHash = HashMap<String, String>;
+
 #[derive(Copy, Clone, Debug)]
 pub struct Entry {
     offset: u16,
@@ -55,7 +57,7 @@ impl SubBucketer {
     }
 
     /// Put a sub bucket into the block. Use msgpack to serialize the hashmap.
-    pub fn put_sub_bucket(&mut self, index : u8, map : &HashMap<i32,i32>) -> Result<(), String> {
+    pub fn put_sub_bucket(&mut self, index : u8, map : &StrHash) -> Result<(), String> {
         let buf : Vec<u8> = try!(msgpack_helpers::encode(map));
         let size       = buf.len() as u16;
         let mut entry  = self.get_entry(index);
@@ -84,7 +86,7 @@ impl SubBucketer {
     /// Get a sub bucket from the block, the result is gross and can return
     /// an Option hash map. In case the size of the block we're trying to get is 0
     /// which indicates a sub bucket that doesn't exist.
-    pub fn get_sub_bucket(&self, index : u8) -> Result<Option<HashMap<i32,i32>>, String> {
+    pub fn get_sub_bucket(&self, index : u8) -> Result<Option<StrHash>, String> {
         let entry = self.get_entry(index);
         if entry.size == 0 {
             return Ok(None)
@@ -159,12 +161,12 @@ mod tests {
         let mut b = SubBucketer::new();
 
         let mut h = HashMap::new();
-        h.insert(5, 6);
-        h.insert(7, 8);
+        h.insert("hello".to_string(), "world".to_string());
+        h.insert("fuzzy".to_string(), "bunny".to_string());
 
         b.put_sub_bucket(1, &h).unwrap();
 
-        let h2 = b.get_sub_bucket(1).unwrap().unwrap();
+        let h2 : super::StrHash = b.get_sub_bucket(1).unwrap().unwrap();
         assert_eq!(h, h2);
 
         let h3 = b.get_sub_bucket(2).unwrap();
@@ -176,8 +178,8 @@ mod tests {
         let mut b = SubBucketer::new();
 
         let mut h = HashMap::new();
-        h.insert(5, 6);
-        h.insert(7, 8);
+        h.insert("hello".to_string(), "world".to_string());
+        h.insert("fuzzy".to_string(), "bunny".to_string());
 
         b.put_sub_bucket(0, &mut h).unwrap();
         b.del_sub_bucket(0);

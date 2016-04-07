@@ -5,8 +5,10 @@ use msgpack_coders::{Encoder,Decoder};
 use rustc_serialize::Decodable;
 use rustc_serialize::Encodable;
 
+use super::StrHash;
+
 /// Return a buffer with the serialized hash map in it.
-pub fn encode(map : &HashMap<i32,i32>) -> Result<Vec<u8>, String> {
+pub fn encode(map : &StrHash) -> Result<Vec<u8>, String> {
     let mut buf: Vec<u8> = Vec::new();
 
     {
@@ -20,7 +22,7 @@ pub fn encode(map : &HashMap<i32,i32>) -> Result<Vec<u8>, String> {
 }
 
 /// Decode a serialized hash map from a slice
-pub fn decode(slice : &[u8]) -> Result<HashMap<i32,i32>, String> {
+pub fn decode(slice : &[u8]) -> Result<StrHash, String> {
     let c = Cursor::new(slice);
 
     let mut decoder = Decoder::new(c);
