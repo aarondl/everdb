@@ -1,3 +1,6 @@
+//TODO(aarondl): Remove this
+#![allow(dead_code)]
+
 mod block;
 mod block_iterator;
 mod helpers;
@@ -11,12 +14,12 @@ use byteorder::{BigEndian, ByteOrder};
 
 // Ours
 use self::helpers::*;
-use self::block::{Block,EMPTY_BLOCK};
+use self::block::*;
 
 const ENTRY_SIZE             : u32 = 4;
 const SUB_BUCKET_HEADER_SIZE : u32 = 1024;
 const MAX_SUB_BUCKETS        : u32 = SUB_BUCKET_HEADER_SIZE / ENTRY_SIZE;
-const MAX_DATA_SIZE          : u32 = 4096 - SUB_BUCKET_HEADER_SIZE - super::HASH_FOOTER_SIZE - self::block::BLOCK_FOOTER_SIZE;
+const MAX_DATA_SIZE          : u32 = BLOCK_SIZE - SUB_BUCKET_HEADER_SIZE - super::HASH_FOOTER_SIZE - BLOCK_FOOTER_SIZE;
 
 pub type StrHash = HashMap<String, String>;
 
@@ -63,11 +66,13 @@ impl SubBucketer {
         let mut entry  = self.get_entry(index);
 
         // Hard case - it doesn't fit, allocate new
-        if size > entry.size {
+        if entry.size == 0 || size > next_power_of_2(entry.size) {
             match self.find_space(size) {
                 Some(off) => entry.offset = off,
                 None      => return Err("Ran out of disk space I guess".to_string()),
             }
+
+            self.add_size(next_power_of_2(size));
         }
 
         entry.size = size;
@@ -80,6 +85,8 @@ impl SubBucketer {
     /// Delete a sub bucket from the block, essentially just zeroes out the
     /// entry so that it appears unused. The data is still present.
     pub fn del_sub_bucket(&mut self, index : u8) {
+        let entry = self.get_entry(index);
+        self.sub_size(next_power_of_2(entry.size));
         self.put_entry(index, Entry { offset: 0, size: 0 });
     }
 
@@ -148,6 +155,24 @@ impl SubBucketer {
 
         Some(next_offset)
     }
+
+    fn add_size(&mut self, size : u16) {
+        let mut slice = &mut self[(BLOCK_SIZE - BLOCK_FOOTER_SIZE) as usize..BLOCK_SIZE as usize];
+        let current_size = BigEndian::read_u16(slice);
+        BigEndian::write_u16(slice, current_size + size);
+    }
+
+    fn sub_size(&mut self, size : u16) {
+        let mut slice = &mut self[(BLOCK_SIZE - BLOCK_FOOTER_SIZE) as usize..BLOCK_SIZE as usize];
+        let current_size = BigEndian::read_u16(slice);
+        BigEndian::write_u16(slice, current_size - size);
+    }
+
+    pub fn get_size(&self) -> u16 {
+        let start = (BLOCK_SIZE - BLOCK_FOOTER_SIZE) as usize;
+        let end   = BLOCK_SIZE as usize;
+        return BigEndian::read_u16(&self[start..end])
+    }
 }
 
 #[cfg(test)]
@@ -171,6 +196,32 @@ mod tests {
 
         let h3 = b.get_sub_bucket(2).unwrap();
         assert!(h3.is_none());
+    }
+
+    #[test]
+    fn ensure_efficient_allocation() {
+        let mut b = SubBucketer::new();
+
+        let mut h = HashMap::new();
+
+        // Insert once at 18 bytes of msgpack - next power of 2 is 32
+        h.insert("hello".to_string(), "world".to_string());
+        b.put_sub_bucket(0, &h).unwrap();
+
+        // Insert something that should start at byte 32 so we can tell if it's messed up
+        b.put_sub_bucket(1, &h).unwrap();
+
+        // Insert once at 25 bytes of msgpack - next power of 2 is still 32, should re-use
+        h.insert("fuzzy".to_string(), "bunny".to_string());
+        b.put_sub_bucket(0, &h).unwrap();
+
+        assert!(b[1024] != 0, "should have written at data byte 0");
+        assert!(b[1024+32] != 0, "should have written at data byte 32");
+        assert!(b[1024+64] == 0, "should not have written at data byte 64");
+
+        for i in b.0.iter() {
+            print!("{}, ", &i);
+        }
     }
 
     #[test]
@@ -248,4 +299,51 @@ mod tests {
         assert_eq!(b.find_space(9).unwrap(), 48);
         assert_eq!(b.find_space(28).unwrap(), 96);
     }
+
+    #[test]
+    fn size_accounting() {
+        let mut b = SubBucketer::new();
+
+        assert_eq!(b.get_size(), 0);
+
+        let mut h = HashMap::new();
+        h.insert("hello".to_string(), "world".to_string());
+        h.insert("fuzzy".to_string(), "bunny".to_string());
+
+        b.put_sub_bucket(0, &mut h).unwrap();
+        // 25 bytes is the expected size of a msgpack encoding of the above
+        // rounded to the next power of 2
+        assert_eq!(b.get_size(), 32);
+
+        b.del_sub_bucket(0);
+        assert_eq!(b.get_size(), 0);
+    }
+
+    #[test]
+    fn get_size() {
+        let mut b = SubBucketer::new();
+        b.0[(4096 - super::block::BLOCK_FOOTER_SIZE) as usize] = 1;
+        b.0[(4096 - super::block::BLOCK_FOOTER_SIZE + 1) as usize] = 1;
+
+        assert_eq!(b.get_size(), 257);
+    }
+
+    #[test]
+    fn add_size() {
+        let mut b = SubBucketer::new();
+        assert_eq!(b.get_size(), 0);
+        b.add_size(20);
+        assert_eq!(b.get_size(), 20);
+    }
+
+    #[test]
+    fn sub_size() {
+        let mut b = SubBucketer::new();
+        assert_eq!(b.get_size(), 0);
+        b.add_size(20);
+        assert_eq!(b.get_size(), 20);
+        b.sub_size(15);
+        assert_eq!(b.get_size(), 5);
+    }
+
 }

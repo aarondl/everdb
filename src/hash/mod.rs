@@ -12,10 +12,14 @@
 //! The second section is the msgpack_maps themselves (because we're too lazy to do quadratic hashing)
 //! The third section is the hash table information (footer)
 
+//TODO(aarondl): Remove this
+#![allow(dead_code)]
+
 #[macro_use]
 mod entry;
 
 use std::collections::HashMap;
+use std::hash::{Hash as Hashing, Hasher};
 
 use self::entry::SubBucketer;
 
@@ -48,7 +52,9 @@ impl Hash {
 
     /// get_bucket is a helper function to retrieve the sub_bucket (the block).
     fn get_bucket(&self, key : &str) -> (usize, u8, MaybeHash) {
-        let hash : u32 = key.as_bytes().iter().fold(0, |a, b| a + (*b as u32)); // "hash" the string LOL
+        let mut hasher = ::std::hash::SipHasher::new();
+        key.hash(&mut hasher);
+        let hash : u32 = hasher.finish() as u32;
 
         let level = if self.level == 0 { 0 } else { 1 << self.level };
 
@@ -77,10 +83,10 @@ impl Hash {
 
     /// set a key-value pair
     pub fn set(&mut self, key : &str, value : &str) {
-        let (block_index, sub_bucket_index, mut maybeHash) = self.get_bucket(key);
+        let (block_index, sub_bucket_index, maybe_hash) = self.get_bucket(key);
 
         let mut hash : HashMap<String, String>;
-        match maybeHash {
+        match maybe_hash {
             Some(x) => hash = x,
             None    => hash = HashMap::new(),
         }
@@ -91,24 +97,24 @@ impl Hash {
 
         hash.insert(key.to_string(), value.to_string());
 
-        let mut shouldGrow = false;
+        let mut should_grow = false;
         {
             let mut block = &mut self.blocks[block_index];
             block.put_sub_bucket(sub_bucket_index, &hash).unwrap();
-            shouldGrow = block.len() > 3072;
+            should_grow = block.get_size() > 3072;
         }
 
-        if shouldGrow {
+        if should_grow {
             self.grow();
         }
     }
 
     /// get a key-value pair
     pub fn get(&self, key : &str) -> Option<String> {
-        let (_, _, mut maybeHash) = self.get_bucket(key);
+        let (_, _, maybe_hash) = self.get_bucket(key);
 
-        let mut hash : HashMap<String, String>;
-        match maybeHash {
+        let hash : HashMap<String, String>;
+        match maybe_hash {
             Some(x) => hash = x,
             None    => return None,
         }
@@ -121,7 +127,6 @@ impl Hash {
 
     /// grow the hash table
     fn grow(&mut self) {
-
     }
 }
 

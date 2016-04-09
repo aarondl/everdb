@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::Cursor;
 
 use msgpack_coders::{Encoder,Decoder};
